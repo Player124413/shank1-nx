@@ -29,6 +29,25 @@ port/src/android/            the native side of all that
   etc2_encode.h              the BC1/3/4/5 -> ETC2/EAC transcoders
 ```
 
+## Does building the APK need the game files?
+
+**Yes - your own copy, at build time, for two steps (and for nothing else):**
+
+1. **The code generator reads `default.xex`.** `rexglue codegen` turns the game's PowerPC code into the ~100 MB of C++
+   that `libmain.so` is compiled from. Without your `default.xex` there is no `port/generated/default`, so the native
+   library cannot be built and there is no APK. This is the same step as for the Switch build
+   ([building.md](building.md), step 3).
+2. **The shader cache comes from your copy.** Renut translates the game's Xenos shaders with DXC on the PC; the phone
+   only carries the result (step 3 below).
+
+What the game files do **not** affect: the Kotlin side, the launcher, the resources. `./gradlew assembleDebug` gets as
+far as configuring CMake without them and then fails in codegen's absence, not in the app.
+
+And what the APK never contains: the game's data. Textures, audio, levels and `default.xex` are imported by the player
+at runtime through the launcher, so the APK is the program and the touch layouts - a few tens of megabytes, the same
+`SHANK1_RENUT_RELEASE_SHADERS` idea as the NSP (program only). The shader cache *is* game data: a personal build may
+bake it in, an APK you hand to someone else may not.
+
 ## What you need
 
 - VS2022 (or LLVM/clang 20+) and Python 3 on a PC, as for the console build: [building.md](building.md), steps 1-2.
@@ -65,18 +84,30 @@ gradle wrapper --gradle-version 8.7      # once: the wrapper's jar and scripts a
 message naming the flag when it is missing. `shank1.sdl3Dir` goes to CMake as `-DSHANK1_SDL3_DIR`, and SDL3 is built as
 a subproject and linked into `libmain.so`.
 
-### 3. Renut's shader cache
+### 3. Renut's shader cache (from your copy)
 
 Renut translates the game's Xenos shaders with DXC, which is a Windows host tool: it cannot run while cross-compiling
-to Android, exactly as on the Switch. Build the cache on the PC for the same tree and hand it to the Android build:
+to Android, exactly as on the Switch. It needs your `data-360/bootstrap/shaders/*.fxc` and, for the 21 shaders the
+game compiles at run time from HLSL text, one PC run through the title screen and a cutscene
+([building.md](building.md), step 5):
 
 ```powershell
-python tools/renut_switch_shader_cache.py     # writes the copy without the DXIL arrays
-./gradlew assembleRelease -Pshank1.shaderCache=<that>/shaders.cmake.cpp
+python tools/shank1_dump_shaders.py --game ../extracted --out out/renut_shader_dump
+# ... the PC build with -DSHANK1_RENUT_RENDERER=ON, run once: it captures what the cache lacks into
+#     out/build/pc-renut/shader_capture/
+python tools/renut_switch_shader_cache.py --pc out/build/pc-renut
 ```
 
-Compiled in as `SHANK1_RENUT_SHADER_CACHE_CPP`. Without it the APK builds and starts but draws nothing; the build says
-so in a warning.
+That writes `out/renut_switch/shader_cache_switch.cpp` (+ `spirv_cache.zst`, which the .cpp embeds with `.incbin`),
+which the Android build compiles in - the same file the Switch build uses, because it is the renderer's SPIR-V cache
+with the DXIL arrays stubbed out. Override the path with `-Pshank1.shaderCache=<file>` if you keep it elsewhere:
+
+```powershell
+./gradlew assembleRelease -Pshank1.shaderCache=<that>/shader_cache_switch.cpp
+```
+
+Without it the APK builds and starts but draws nothing; the build says so in a warning. The cache is game data: fine in
+your own build, not fine in one you distribute.
 
 ### 4. The APK
 

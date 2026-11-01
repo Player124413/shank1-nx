@@ -97,8 +97,10 @@ if(REXGLUE_PLATFORM_ANDROID)
     set(PLUME_PLATFORM_ANDROID ON CACHE BOOL "" FORCE)
     set(PLUME_DEKO3D OFF CACHE BOOL "" FORCE)
     set(BANJO_DEKO3D_HOST_SHADERS OFF CACHE BOOL "" FORCE)
-    set(SHANK1_RENUT_SHADER_CACHE_CPP "" CACHE FILEPATH
-        "Renut's shader cache for Android, generated on the PC (tools/renut_switch_shader_cache.py)")
+    # The same source the Switch build compiles in (tools/renut_switch_shader_cache.py): the SPIR-V cache and the
+    # stubbed-out DXIL symbols. It is game data - a personal build may bake it in, a distributed APK may not.
+    set(BANJO_RENUT_SHADER_CACHE_CPP "${CMAKE_SOURCE_DIR}/out/renut_switch/shader_cache_switch.cpp" CACHE FILEPATH
+        "Renut's shader cache for the Android build (from a PC build: tools/renut_switch_shader_cache.py)")
 endif()
 
 include("${CMAKE_SOURCE_DIR}/src/renut_engine/gpu/gpu.cmake")
@@ -128,13 +130,13 @@ target_include_directories(shank1_renut_gpu PRIVATE
 target_link_libraries(shank1_renut_gpu PRIVATE rex::runtime)
 if(REXGLUE_PLATFORM_ANDROID)
     # The shader cache from the PC build: without it the renderer has no translated game shaders on a device that
-    # cannot run DXC (docs/android.md). The file is a .cpp, compiled into the OBJECT library like the console's GLSL
-    # package.
-    if(EXISTS "${SHANK1_RENUT_SHADER_CACHE_CPP}")
-        target_sources(shank1_renut_gpu PRIVATE "${SHANK1_RENUT_SHADER_CACHE_CPP}")
-        set_source_files_properties("${SHANK1_RENUT_SHADER_CACHE_CPP}" PROPERTIES SKIP_PRECOMPILE_HEADERS ON)
+    # cannot run DXC (docs/android.md, step 3). A .cpp with the SPIR-V embedded as a .zst blob next to it
+    # (__asm__ .incbin), compiled into the OBJECT library like the console's GLSL package.
+    if(EXISTS "${BANJO_RENUT_SHADER_CACHE_CPP}")
+        target_sources(shank1_renut_gpu PRIVATE "${BANJO_RENUT_SHADER_CACHE_CPP}")
+        set_source_files_properties("${BANJO_RENUT_SHADER_CACHE_CPP}" PROPERTIES SKIP_PRECOMPILE_HEADERS ON)
     else()
-        message(WARNING "No SHANK1_RENUT_SHADER_CACHE_CPP: the Android build has no translated shader cache and the "
+        message(WARNING "No ${BANJO_RENUT_SHADER_CACHE_CPP}: the Android build has no translated shader cache and the "
                         "game will not draw (docs/android.md, step 3)")
     endif()
 endif()

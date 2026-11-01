@@ -62,7 +62,7 @@ android {
                     "-DSHANK1_RENUT_RENDERER=ON",
                     "-DSHANK1_ANDROID_ETC2=${if (project.findProperty("shank1.etc2") == "off") "OFF" else "ON"}",
                     sdl3Dir?.let { "-DSHANK1_SDL3_DIR=$it" },
-                    shaderCache?.let { "-DSHANK1_RENUT_SHADER_CACHE_CPP=$it" },
+                    shaderCache?.let { "-DBANJO_RENUT_SHADER_CACHE_CPP=$it" },
                 )
                 cppFlags += listOf("-O3", "-fno-exceptions", "-fno-rtti", "-fvisibility=hidden", "-ffunction-sections",
                                    "-fdata-sections")

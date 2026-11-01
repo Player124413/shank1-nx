@@ -72,7 +72,9 @@ copy of the game with the system's folder picker, and a touch pad you lay out yo
   is transcoded to ETC2/EAC as it is uploaded (`port/src/android/etc2_encode.h`), which keeps 4 bits a pixel and never
   re-encodes the game's own files.
 
-Building it needs a PC for the codegen and the shader cache: see [docs/android.md](docs/android.md).
+Building it needs a PC and your own copy of the game: the code generator reads `default.xex`, and Renut's shader
+cache is made from the game's shaders on the PC. None of that ends up in the APK - the app carries only the program,
+and the game's data is imported on the device. See [docs/android.md](docs/android.md).
 
 ## Known issues
 <div align=center>
