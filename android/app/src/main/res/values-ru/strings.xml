@@ -60,6 +60,13 @@
     <string name="setting_reset_layout">Сбросить раскладку</string>
     <string name="setting_reset_layout_confirm">Удалить отредактированные раскладки и вернуть стандартные?</string>
     <string name="setting_layout_reset">Раскладка сброшена.</string>
+    <string name="setting_shaders">Шейдеры, собранные на этом устройстве</string>
+    <string name="setting_shaders_hint">Часть шейдеров игра компилирует на ходу: эта копия их сохраняет. Экспортируйте их — и сборка сможет включить все.</string>
+    <string name="setting_shaders_count">собрано: %1$d</string>
+    <string name="setting_shaders_none">пока нет: поиграйте немного и вернитесь</string>
+    <string name="setting_shaders_export">Экспортировать</string>
+    <string name="setting_shaders_exported">Экспортировано шейдеров: %1$d.</string>
+    <string name="setting_shaders_failed">Не удалось записать архив: %1$s</string>
     <string name="setting_delete_data">Удалить импортированные данные игры</string>
     <string name="setting_delete_data_confirm">Удалить %1$s импортированных данных игры? Копия в выбранной вами папке не затрагивается.</string>
     <string name="setting_data_deleted">Данные игры удалены.</string>

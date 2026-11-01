@@ -2,6 +2,7 @@ package com.shank1.port
 
 import android.app.Activity
 import android.app.AlertDialog
+import android.content.Intent
 import android.graphics.Color
 import android.graphics.Typeface
 import android.os.Bundle
@@ -29,6 +30,20 @@ class SettingsActivity : Activity() {
 
     private lateinit var prefs: Prefs
     private lateinit var content: LinearLayout
+
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode != REQUEST_EXPORT || resultCode != RESULT_OK) return
+        val uri = data?.data ?: return
+        try {
+            val written = contentResolver.openOutputStream(uri)?.use { output ->
+                ShaderCaptures.writeZip(this, output)
+            } ?: error("the picker gave no file")
+            toast(getString(R.string.setting_shaders_exported, written))
+        } catch (e: Exception) {
+            toast(getString(R.string.setting_shaders_failed, e.message ?: e.javaClass.simpleName))
+        }
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -117,6 +132,9 @@ class SettingsActivity : Activity() {
                 .show()
         }
 
+        section(R.string.settings_shaders)
+        shaders()
+
         section(R.string.settings_storage)
         button(R.string.setting_delete_data) {
             AlertDialog.Builder(this)
@@ -131,6 +149,36 @@ class SettingsActivity : Activity() {
         }
 
         footer(getString(R.string.settings_footer))
+    }
+
+    /**
+     * The shaders this device compiled while playing: the game makes some of its shaders at run time, so a build made
+     * from its files alone lacks them. Exporting them here is what lets the next build include the whole set.
+     */
+    private fun shaders() {
+        val captures = ShaderCaptures.count(this)
+        row(
+            R.string.setting_shaders,
+            R.string.setting_shaders_hint,
+            valueLabel(
+                if (captures > 0) getString(R.string.setting_shaders_count, captures)
+                else getString(R.string.setting_shaders_none),
+            ),
+        )
+        if (captures > 0) {
+            button(R.string.setting_shaders_export) {
+                val intent = Intent(Intent.ACTION_CREATE_DOCUMENT).apply {
+                    addCategory(Intent.CATEGORY_OPENABLE)
+                    type = "application/zip"
+                    putExtra(Intent.EXTRA_TITLE, "shank1-shaders-${captures}.zip")
+                }
+                try {
+                    startActivityForResult(intent, REQUEST_EXPORT)
+                } catch (e: Exception) {
+                    toast(getString(R.string.setting_shaders_failed, e.message ?: "no file picker"))
+                }
+            }
+        }
     }
 
     // --- Small widgets, built in code so the app needs no AndroidX and no XML per row -----------------------------
@@ -166,7 +214,7 @@ class SettingsActivity : Activity() {
         )
     }
 
-    private fun row(titleRes: Int, hintRes: Int?, valueView: View, onTap: (() -> Unit)?) {
+    private fun row(titleRes: Int, hintRes: Int?, valueView: View, onTap: (() -> Unit)? = null) {
         val row = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
@@ -283,6 +331,8 @@ class SettingsActivity : Activity() {
     private fun dp(value: Int) = (value * resources.displayMetrics.density).toInt()
 
     companion object {
+        private const val REQUEST_EXPORT = 4101
+
         private val COLOR_INK = Color.parseColor("#07080A")
         private val COLOR_BONE = Color.parseColor("#E9E2D5")
         private val COLOR_ASH = Color.parseColor("#8C8778")

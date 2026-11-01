@@ -24,6 +24,9 @@
 #if defined(PLUME_DEKO3D)
 #include "renut_engine/gpu/banjo_renut_deko3d.h"  // banjo-nx (2026-10-17): the deko3d back end's GLSL package
 #endif
+#if defined(__ANDROID__)
+#include "android/android_paths.h"  // the app's writable folder for captured shaders
+#endif
 
 REXCVAR_DEFINE_STRING(renut_shader_capture_dir, "shader_capture", "Nuts&Bolts/Graphics",
                       "Where shaders missing from the shader cache are written; the next build "
@@ -173,8 +176,15 @@ void CaptureMissingShader(const uint8_t *container, bool pixel_shader, uint64_t 
 
   const auto *header = reinterpret_cast<const d3d::ShaderContainer *>(container);
   const size_t size = size_t(u32(header->virtualSize)) + u32(header->physicalSize);
+#if defined(__ANDROID__)
+  // Android: the library's folder belongs to the system. Captures go to the app's own files directory, beside the
+  // imported game data, and the launcher can pack them for a build that has no PC to capture on
+  // (docs/android.md, "No PC?").
+  const std::filesystem::path dir = shank1::android::ShaderCaptureDirectory();
+#else
   // banjo-nx: next to the executable (on the Switch, the NRO's folder), not the working directory.
   const std::filesystem::path dir = banjo::renut_gpu::NextToExecutable(REXCVAR_GET(renut_shader_capture_dir));
+#endif
   const std::filesystem::path path =
       dir / fmt::format("{}_{:016x}.bin", pixel_shader ? "ps" : "vs", hash);
 

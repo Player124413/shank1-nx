@@ -64,6 +64,13 @@
     <string name="setting_reset_layout">Reset the layout</string>
     <string name="setting_reset_layout_confirm">Throw away the edited layouts and go back to the defaults?</string>
     <string name="setting_layout_reset">Layout reset.</string>
+    <string name="setting_shaders">Shaders this device captured</string>
+    <string name="setting_shaders_hint">The game compiles some of its shaders at run time: this copy captures them as it plays. Export them and a build can include all of them.</string>
+    <string name="setting_shaders_count">%1$d captured</string>
+    <string name="setting_shaders_none">none yet: play for a while, then come back</string>
+    <string name="setting_shaders_export">Export the captures</string>
+    <string name="setting_shaders_exported">Exported %1$d shaders.</string>
+    <string name="setting_shaders_failed">Could not write the archive: %1$s</string>
     <string name="setting_delete_data">Delete the imported game data</string>
     <string name="setting_delete_data_confirm">Delete %1$s of imported game data? Your copy in the folder you picked is not touched.</string>
     <string name="setting_data_deleted">Game data deleted.</string>

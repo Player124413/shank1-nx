@@ -86,6 +86,15 @@ std::string OptionValue(const char *key, const char *fallback) {
   return found->second;
 }
 
+std::string ShaderCaptureDirectory() {
+  const std::string &root = g_game_root;
+  const auto slash = root.find_last_of('/');
+  // filesDir itself: game_root.nxpack or game_root/ lives in it.
+  if (slash != std::string::npos)
+    return root.substr(0, slash) + "/shader_capture";
+  return "shader_capture";
+}
+
 bool OptionFlag(const char *key, bool fallback) {
   const std::string value = OptionValue(key, fallback ? "true" : "false");
   if (value == "true" || value == "1" || value == "on" || value == "yes")

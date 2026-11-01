@@ -244,10 +244,25 @@ APK. Run it from **Actions → Android APK → Run workflow**.
 | Input | What to give it |
 | --- | --- |
 | `game_data_url` | A **direct** download link to an archive (zip/7z/tar.gz) of the extracted game - `default.xex`, `data/`, `data-360/`, `ArcadeInfo.xml` - or to `default.xex` itself. A share page that shows a "download" button will not do: the workflow reads the file, and says so if it gets a web page instead. |
-| `shaders_url` | Best: an archive with `shader_cache_switch.cpp` **and** `spirv_cache.zst` from your own PC build (step 3 above) - the complete shader set, and roughly half an hour less work. Otherwise: the game's shader files (`data-360/bootstrap/shaders/*.fxc`) and the workflow makes the cache itself, which lacks the 21 shaders the game compiles at run time. |
+| `shaders_url` | Optional. Best: an archive with `shader_cache_switch.cpp` **and** `spirv_cache.zst` from a PC build (step 3 above) - the complete set, and roughly half an hour less work. Or `ps_*.bin`/`vs_*.bin` captured on a phone (see below). Or the game's shader files. **Empty: the cache is made from the game data alone**, which lacks the 21 shaders the game compiles as it runs. |
 | `variant` | `debug` installs as is. `release` is signed with a throwaway debug key so it also installs; sign your own copy properly (Settings → Signing) for anything you keep. |
 | `etc2` | On unless you want the console's BC blocks untouched (step "ETC2" above). |
 | `sdl3_ref` | Only used when the SDK tree carries no SDL3: the tag it clones. |
+
+### No PC?
+
+Then the loop is the workflow itself, in two runs:
+
+1. **Run it with only `game_data_url`.** It dumps the 54 shaders in the game's files, translates them on the runner and
+   builds the APK. Effects whose shader the game compiles at run time (21 of them) have nothing to draw with, so parts
+   of the picture can be missing.
+2. **Play that build, then export what it captured.** The renderer writes every shader it had to miss into
+   `filesDir/shader_capture` (`ps_<hash>.bin` / `vs_<hash>.bin`), and the app's **Settings → Shaders this device
+   captured → Export the captures** packs them into a zip of your choosing (system file picker, no permissions).
+3. **Run it again with that zip as `shaders_url`.** The workflow merges the captures into the dump, so this build's
+   cache has everything this device needed. Play again, export again, and repeat if a new area needs another shader.
+
+Those captures are the game's own shader program: keep them for your own builds, do not publish them.
 
 What it does, in order: restores the cached generated C++ (keyed by `shank1_manifest.toml` + `overrides.toml`) or runs
 `rexglue codegen`; when no shader cache was supplied, dumps and translates the shaders and builds the PC tree for it;

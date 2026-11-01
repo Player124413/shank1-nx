@@ -38,4 +38,12 @@ std::string OptionValue(const char *key, const char *fallback);
 /** OptionValue as a bool: `true`/`1`/`on`/`yes` are true, anything else (and a missing key) is [fallback]. */
 bool OptionFlag(const char *key, bool fallback);
 
+/**
+ * Where the renderer writes the shaders its cache lacks (`ps_<hash>.bin` / `vs_<hash>.bin`): `filesDir/shader_capture`
+ * beside the imported game data, because the library's own folder is read-only on Android. The launcher's Settings can
+ * pack them into an archive, and a build with them in the dump gets a complete shader cache - that is the loop for a
+ * player with no PC (docs/android.md, "No PC?").
+ */
+std::string ShaderCaptureDirectory();
+
 } // namespace shank1::android

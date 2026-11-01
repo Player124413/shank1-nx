@@ -1,19 +1,21 @@
 name: Android APK
 
-# Builds the Android app from source on a Windows runner (the same host the console build uses: the code generator
-# needs a PC, and Renut's shader toolchain is a Windows host tool).
+# Builds the Android app from source on a Windows runner (the host the console build uses too: the code generator needs
+# a PC, and Renut's shader toolchain is a Windows host tool).
 #
-# You supply your own copy of the game as links, per run - nothing of it is committed, and nothing of it ends up in the
+# You supply your own copy of the game as a link, per run - nothing of it is committed, and nothing of it ends up in the
 # APK: the launcher imports the game on the device, and the APK only carries the program.
 #
 #   game_data_url  an archive (zip/7z/tar.gz) with the extracted game (default.xex, data/, data-360/, ArcadeInfo.xml),
 #                  or a direct URL to default.xex
-#   shaders_url    best: an archive with shader_cache_switch.cpp + spirv_cache.zst from your own PC build
-#                  (docs/android.md step 3) - the full shader set, ~30 minutes faster;
-#                  otherwise: an archive of the game's shaders (data-360/bootstrap/shaders/*.fxc) or a shader dump,
-#                  and the workflow makes the cache itself - it will lack the 21 shaders the game compiles at run time.
+#   shaders_url    optional:
+#                    - shader_cache_switch.cpp + spirv_cache.zst from a PC build: the complete set, ~30 minutes faster;
+#                    - ps_*.bin / vs_*.bin captured on a phone (Settings > Export the captures): merged into the dump,
+#                      which is the only way to get the shaders the game compiles at run time without a PC;
+#                    - the game's shader files (data-360/bootstrap/shaders/*.fxc);
+#                    - empty: the cache is made here from the game data alone.
 #
-# Read docs/android.md for the whole chain. This workflow is the console build's steps 1-5 plus Gradle.
+# Read docs/android.md for the whole chain and for the "no PC" loop.
 
 on:
   workflow_dispatch:
@@ -23,8 +25,9 @@ on:
         required: true
         type: string
       shaders_url:
-        description: 'Link to your shaders: shader_cache_switch.cpp + spirv_cache.zst (best), or the game shader files'
-        required: true
+        description: 'Optional: your shader cache, shaders captured on a phone, or the game shader files. Empty = make the cache here'
+        required: false
+        default: ''
         type: string
       variant:
         description: 'APK variant (release is signed with a throwaway debug key so it installs)'
@@ -82,7 +85,7 @@ jobs:
           submodules: false
 
       # The recompiled game's C++ (about 100 MB, ~22,000 functions) depends only on the manifest and the overrides, so
-      # it is cached: a rerun without touching them skips the expensive step.
+      # it is cached: a rerun that does not touch them skips the expensive step.
       - name: Restore the generated code
         uses: actions/cache@v4
         with:
@@ -91,8 +94,8 @@ jobs:
 
       - name: Toolchain paths
         run: |
-          Add-Content $env:GITHUB_PATH 'C:\Program Files\CMake\bin'
-          Add-Content $env:GITHUB_PATH 'C:\Program Files\LLVM\bin'
+          Add-Content $env:GITHUB_PATH (Join-Path (Join-Path $env:ProgramFiles 'CMake') 'bin')
+          Add-Content $env:GITHUB_PATH (Join-Path (Join-Path $env:ProgramFiles 'LLVM') 'bin')
           python -m pip install --disable-pip-version-check --quiet xxhash pillow
           cmake --version | Select-Object -First 1
           clang --version | Select-Object -First 1
@@ -101,31 +104,32 @@ jobs:
       - name: Download the game data
         run: |
           $ErrorActionPreference = 'Stop'
+          $url = '${{ inputs.game_data_url }}'
           $temp = Join-Path $env:RUNNER_TEMP 'game-data'
           New-Item -ItemType Directory -Force $temp | Out-Null
           $file = Join-Path $temp 'download.bin'
-          Write-Host "downloading the game data"
-          Invoke-WebRequest -Uri '${{ inputs.game_data_url }}' -OutFile $file -MaximumRedirection 10
-
-          $raw = Join-Path $temp 'raw'
-          New-Item -ItemType Directory -Force $raw | Out-Null
+          Write-Host 'downloading the game data'
+          Invoke-WebRequest -Uri $url -OutFile $file -MaximumRedirection 10
           if ($file.Length -lt 1MB) { throw "the download is empty ($($file.Length) bytes): check the link" }
           $head = [System.IO.File]::ReadAllText($file, [System.Text.Encoding]::UTF8, 200)
           if ($head -match '(?i)<!doctype html|<html') {
             throw 'the link returned a web page, not a file: use a direct download link (one that starts the download)'
           }
-          if ('${{ inputs.game_data_url }}' -match '\.xex($|\?)') {
+
+          $raw = Join-Path $temp 'raw'
+          New-Item -ItemType Directory -Force $raw | Out-Null
+          $extension = [System.IO.Path]::GetExtension(($url.Split('?')[0])).ToLower()
+          $sevenZip = Join-Path (Join-Path $env:ProgramFiles '7-Zip') '7z.exe'
+          if ($extension -eq '.xex') {
             Copy-Item $file (Join-Path $raw 'default.xex')
+          } elseif ($extension -eq '.zip') {
+            Expand-Archive -Path $file -DestinationPath $raw -Force
+          } elseif (Test-Path $sevenZip) {
+            & $sevenZip x -y "-o$raw" $file | Select-Object -Last 3
+            if ($LASTEXITCODE -ne 0) { throw '7-Zip could not extract the game data' }
           } else {
-            if ('${{ inputs.game_data_url }}' -match '\.zip($|\?)') {
-              Expand-Archive -Path $file -DestinationPath $raw -Force
-            } elseif (Test-Path 'C:\Program Files\7-Zip\7z.exe') {
-              & 'C:\Program Files\7-Zip\7z.exe' x -y "-o$raw" $file | Select-Object -Last 3
-              if ($LASTEXITCODE -ne 0) { throw '7-Zip could not extract the game data' }
-            } else {
-              & tar -xf $file -C $raw
-              if ($LASTEXITCODE -ne 0) { throw 'could not extract the game data (zip, 7z and tar were refused)' }
-            }
+            & tar -xf $file -C $raw
+            if ($LASTEXITCODE -ne 0) { throw 'could not extract the game data (zip, 7z and tar were refused)' }
           }
 
           $xex = Get-ChildItem $raw -Recurse -Filter default.xex -ErrorAction SilentlyContinue | Select-Object -First 1
@@ -143,33 +147,42 @@ jobs:
 
       - name: Download the shaders
         id: shaders
+        env:
+          SHADERS_URL: ${{ inputs.shaders_url }}
         run: |
           $ErrorActionPreference = 'Stop'
+          $url = $env:SHADERS_URL
           $temp = Join-Path $env:RUNNER_TEMP 'shaders'
-          New-Item -ItemType Directory -Force $temp | Out-Null
-          $file = Join-Path $temp 'download.bin'
-          Write-Host "downloading the shaders"
-          Invoke-WebRequest -Uri '${{ inputs.shaders_url }}' -OutFile $file -MaximumRedirection 10
-          if ($file.Length -lt 4KB) { throw "the download is too small ($($file.Length) bytes): check the link" }
-          $head = [System.IO.File]::ReadAllText($file, [System.Text.Encoding]::UTF8, 200)
-          if ($head -match '(?i)<!doctype html|<html') {
-            throw 'the link returned a web page, not a file: use a direct download link (one that starts the download)'
-          }
-
           $raw = Join-Path $temp 'raw'
           New-Item -ItemType Directory -Force $raw | Out-Null
-          if ('${{ inputs.shaders_url }}' -match '\.(zip)($|\?)') {
-            Expand-Archive -Path $file -DestinationPath $raw -Force
-          } elseif ('${{ inputs.shaders_url }}' -match '\.(fxc|cpp|zst)($|\?)') {
-            Copy-Item $file (Join-Path $raw 'download')
-          } elseif (Test-Path 'C:\Program Files\7-Zip\7z.exe') {
-            & 'C:\Program Files\7-Zip\7z.exe' x -y "-o$raw" $file | Select-Object -Last 3
-            if ($LASTEXITCODE -ne 0) { throw '7-Zip could not extract the shaders' }
+
+          if (-not $url -or $url.Trim() -eq '') {
+            Write-Host 'no shaders link: the cache will be made here from the game data'
           } else {
-            & tar -xf $file -C $raw
-            if ($LASTEXITCODE -ne 0) { throw 'could not extract the shaders (zip, 7z and tar were refused)' }
+            $file = Join-Path $temp 'download.bin'
+            Write-Host 'downloading the shaders'
+            Invoke-WebRequest -Uri $url -OutFile $file -MaximumRedirection 10
+            if ($file.Length -lt 4KB) { throw "the download is too small ($($file.Length) bytes): check the link" }
+            $head = [System.IO.File]::ReadAllText($file, [System.Text.Encoding]::UTF8, 200)
+            if ($head -match '(?i)<!doctype html|<html') {
+              throw 'the link returned a web page, not a file: use a direct download link (one that starts the download)'
+            }
+            $extension = [System.IO.Path]::GetExtension(($url.Split('?')[0])).ToLower()
+            $sevenZip = Join-Path (Join-Path $env:ProgramFiles '7-Zip') '7z.exe'
+            if ($extension -eq '.zip') {
+              Expand-Archive -Path $file -DestinationPath $raw -Force
+            } elseif ($extension -in @('.fxc', '.cpp', '.zst', '.bin')) {
+              Copy-Item $file (Join-Path $raw 'download')
+            } elseif (Test-Path $sevenZip) {
+              & $sevenZip x -y "-o$raw" $file | Select-Object -Last 3
+              if ($LASTEXITCODE -ne 0) { throw '7-Zip could not extract the shaders' }
+            } else {
+              & tar -xf $file -C $raw
+              if ($LASTEXITCODE -ne 0) { throw 'could not extract the shaders (zip, 7z and tar were refused)' }
+            }
           }
 
+          # A ready cache wins: it is the complete set and skips the PC build.
           $cache = Get-ChildItem $raw -Recurse -Filter 'shader_cache_switch.cpp' -ErrorAction SilentlyContinue |
             Select-Object -First 1
           if ($cache) {
@@ -185,20 +198,43 @@ jobs:
             Copy-Item $cache.FullName $cpp -Force
             Copy-Item $blob.FullName $zst -Force
 
-            # The .cpp was generated on your PC with an absolute .incbin path: point it at this checkout.
-            $target = $zst.Replace('\', '/')
+            # The .cpp was generated on another machine, with an absolute .incbin path: point it at this checkout. The
+            # path is spelled the way the generator spells it - forward slashes - so the assembler finds the blob.
+            $slash = [string][char]47
+            $target = $zst -replace [regex]::Escape([string][char]92), $slash
+            $quoted = [string][char]92 + '"'
             $text = Get-Content -Raw $cpp
-            $patched = [regex]::Replace($text, '\.incbin\s*\\"[^\\]*\\"', { param($m) '.incbin \"' + $target + '\"' })
-            if ($patched -eq $text) { throw 'shader_cache_switch.cpp has no .incbin line to patch: is it the right file?' }
+            $marker = $text.IndexOf('.incbin')
+            if ($marker -lt 0) { throw 'shader_cache_switch.cpp has no .incbin line: is it the right file?' }
+            $first = $text.IndexOf($quoted, $marker) + $quoted.Length
+            $second = $text.IndexOf($quoted, $first)
+            if ($first -lt $quoted.Length -or $second -lt $first) { throw 'shader_cache_switch.cpp: the .incbin line is not as expected' }
+            $patched = $text.Substring(0, $first) + $target + $text.Substring($second)
             Set-Content -Path $cpp -Value $patched -NoNewline -Encoding utf8
-
-            Write-Host "shader cache from your PC build: $([math]::Round((Get-Item $cpp).Length / 1KB, 0)) KB of source + $([math]::Round((Get-Item $zst).Length / 1KB, 0)) KB of SPIR-V"
-            "mode=cache" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+            Write-Host "shader cache supplied: $([math]::Round((Get-Item $cpp).Length / 1KB, 0)) KB of source + $([math]::Round((Get-Item $zst).Length / 1KB, 0)) KB of SPIR-V"
+            'mode=cache' | Out-File -FilePath $env:GITHUB_OUTPUT -Append
             "cpp=$cpp" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
-          } else {
-            Write-Warning 'no shader_cache_switch.cpp in the archive: the workflow will make the cache from the game files'
-            "mode=dump" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+            exit 0
           }
+
+          # Shaders a phone captured while playing (Settings > Export the captures): merged into the dump, which is
+          # the only way to get the shaders the game compiles at run time without a PC.
+          $captures = @(Get-ChildItem $raw -Recurse -File -ErrorAction SilentlyContinue |
+            Where-Object { $_.Extension -eq '.bin' -and $_.BaseName -match '^(ps|vs)_[0-9a-fA-F]{16}$' })
+          if ($captures.Count -gt 0) {
+            $dir = Join-Path $env:GITHUB_WORKSPACE 'captured-shaders'
+            New-Item -ItemType Directory -Force $dir | Out-Null
+            $captures | ForEach-Object { Copy-Item $_.FullName $dir -Force }
+            Write-Host "shaders captured on a device: $($captures.Count)"
+            "captures=$dir" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+          }
+
+          $fxc = Get-ChildItem $raw -Recurse -Filter '*.fxc' -ErrorAction SilentlyContinue | Select-Object -First 1
+          if ($fxc) {
+            Write-Host "shader files: $($fxc.DirectoryName) goes into the dump too"
+            "extra=$($fxc.DirectoryName)" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+          }
+          'mode=dump' | Out-File -FilePath $env:GITHUB_OUTPUT -Append
 
       - name: Prepare the tree (SDK submodule, patch, thirdparty, DXC)
         run: pwsh -File tools/setup.ps1
@@ -236,8 +272,8 @@ jobs:
           $size = [math]::Round(((Get-ChildItem port/generated -Recurse -File | Measure-Object Length -Sum).Sum / 1MB), 0)
           Write-Host "generated: $files files, $size MB"
 
-      # Only when the shader cache was not supplied: dump the shaders from the game, build the PC tree (which translates
-      # them with XenosRecomp and writes renut_gpu/shader_cache.cpp), then keep the SPIR-V half.
+      # Only when no cache was supplied: dump the shaders from the game, merge whatever the shaders link had, build the
+      # PC tree (which translates them with XenosRecomp and writes renut_gpu/shader_cache.cpp), keep the SPIR-V half.
       - name: Shader dump
         if: steps.shaders.outputs.mode == 'dump'
         run: |
@@ -246,6 +282,20 @@ jobs:
           try {
             python tools/shank1_dump_shaders.py --game "$env:SHANK1_EXTRACTED" --out out/renut_shader_dump
             if ($LASTEXITCODE -ne 0) { throw 'the shader dump failed (does the game data have data-360/bootstrap/shaders?)' }
+            $dump = Join-Path $PWD 'out/renut_shader_dump'
+
+            # The dump is what the translator reads, so everything else goes in it
+            # (port/cmake/collect_captured_shaders.cmake does the same for a build directory).
+            foreach ($extra in @('${{ steps.shaders.outputs.extra }}', '${{ steps.shaders.outputs.captures }}')) {
+              if ($extra -and (Test-Path $extra)) {
+                Get-ChildItem $extra -File | ForEach-Object {
+                  $target = Join-Path $dump $_.Name
+                  if (-not (Test-Path $target)) { Copy-Item $_.FullName $target }
+                }
+              }
+            }
+            $count = (Get-ChildItem $dump -Recurse -File).Count
+            Write-Host "dump: $count containers"
           } finally { Pop-Location }
 
       - name: PC build for the shader cache
@@ -263,7 +313,7 @@ jobs:
             if ($LASTEXITCODE -ne 0) { throw 'the shader cache was not made' }
           } finally { Pop-Location }
           "cpp=$env:GITHUB_WORKSPACE/port/out/renut_switch/shader_cache_switch.cpp" |
-            Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+            Out-File -FilePath $env:GITHUB_OUTPUT -Append
 
       - name: Find SDL3
         id: sdl3
@@ -278,12 +328,16 @@ jobs:
             $activity = Get-ChildItem -Path thirdparty/sdl3 -Recurse -Filter SDLActivity.java | Select-Object -First 1
           }
           if (-not $activity) { throw 'SDLActivity.java not found after cloning SDL3' }
-          $java = $activity.FullName -replace '[\\/]org[\\/]libsdl[\\/]app[\\/]SDLActivity\.java$', ''
-          $root = $java -replace '[\\/]android-project[\\/]app[\\/]src[\\/]main[\\/]java$', ''
-          if ($java -notmatch 'android-project') { throw "$($activity.FullName) is not SDL3's android-project layout" }
-          Write-Host "SDL3: $root"
-          "java=$java" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
-          "dir=$root" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+
+          # <SDL>/android-project/app/src/main/java/org/libsdl/app/SDLActivity.java
+          $java = $activity.Directory.Parent.Parent.Parent
+          if (-not (Test-Path (Join-Path (Join-Path $java 'org/libsdl/app') 'SDLActivity.java'))) {
+            throw "$($activity.FullName) is not SDL3's android-project layout"
+          }
+          $sdl = $java.Parent.Parent.Parent.Parent.Parent
+          Write-Host "SDL3: $sdl"
+          "java=$($java.FullName)" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+          "dir=$($sdl.FullName)" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
 
       - name: JDK 17
         uses: actions/setup-java@v4
@@ -294,27 +348,27 @@ jobs:
       - name: Install the NDK
         run: |
           $ErrorActionPreference = 'Stop'
-          $sdkmanager = Join-Path $env:ANDROID_HOME 'cmdline-tools/latest/bin/sdkmanager.bat'
+          $sdkmanager = Join-Path (Join-Path $env:ANDROID_HOME 'cmdline-tools/latest/bin') 'sdkmanager.bat'
           if (-not (Test-Path $sdkmanager)) { throw "sdkmanager not found at $sdkmanager" }
           Write-Host "installing NDK $env:SHANK1_NDK"
-          'y' * 20 | & $sdkmanager --licenses | Out-Null
-          & $sdkmanager "ndk;$env:SHANK1_NDK" "platform-tools"
+          ('y' * 20) | & $sdkmanager --licenses | Out-Null
+          & $sdkmanager "ndk;$env:SHANK1_NDK" 'platform-tools'
           if ($LASTEXITCODE -ne 0) { throw 'the NDK install failed' }
-          $ndk = Join-Path $env:ANDROID_HOME "ndk/$env:SHANK1_NDK"
+          $ndk = Join-Path (Join-Path $env:ANDROID_HOME 'ndk') $env:SHANK1_NDK
           if (-not (Test-Path $ndk)) { throw "NDK $env:SHANK1_NDK is not in $env:ANDROID_HOME" }
 
-          # AGP wants a CMake at least 3.25 for this project; the runner's own is newer than anything the SDK ships.
+          # AGP wants a CMake of at least 3.25 for this project; the runner's is newer than anything the SDK ships.
           $cmakeDir = Split-Path (Split-Path (Get-Command cmake).Source)
-          $cmakeVersion = ((cmake --version | Select-Object -First 1) -replace '^cmake version\s+', '').Trim()
+          $cmakeVersion = (cmake --version | Select-Object -First 1).ToString().Trim()
+          if ($cmakeVersion.StartsWith('cmake version ')) { $cmakeVersion = $cmakeVersion.Substring(14) }
           Write-Host "CMake $cmakeVersion at $cmakeDir"
 
-          $escaped = $cmakeDir.Replace('\', '\\').Replace(':', '\:')
+          # local.properties is a Java properties file: the separators are escaped there.
+          $bs = [string][char]92
+          $escaped = $cmakeDir.Replace($bs, $bs + $bs).Replace(':', $bs + ':')
+          $sdkEscaped = $env:ANDROID_HOME.Replace($bs, $bs + $bs).Replace(':', $bs + ':')
           $local = Join-Path $env:GITHUB_WORKSPACE 'android/local.properties'
-          $lines = @(
-            'sdk.dir=' + $env:ANDROID_HOME.Replace('\', '\\').Replace(':', '\:'),
-            'cmake.dir=' + $escaped
-          )
-          Set-Content -Path $local -Value $lines -Encoding ascii
+          Set-Content -Path $local -Value @("sdk.dir=$sdkEscaped", "cmake.dir=$escaped") -Encoding ascii
           "SHANK1_CMAKE_VERSION=$cmakeVersion" | Out-File -FilePath $env:GITHUB_ENV -Append
 
       - name: Gradle setup
@@ -346,11 +400,12 @@ jobs:
             )
 
             if ($variant -eq 'release') {
-              # A release APK is not signed by default: sign it with a throwaway debug key so it installs as is. Replace
-              # it with your own key (Settings > Signing) for anything you keep.
-              $keystore = Join-Path $env:USERPROFILE '.android\debug.keystore'
+              # A release APK is not signed by default: sign it with a throwaway debug key so it installs as is.
+              # Replace it with your own key for anything you keep.
+              $androidHome = Join-Path $env:USERPROFILE '.android'
+              $keystore = Join-Path $androidHome 'debug.keystore'
               if (-not (Test-Path $keystore)) {
-                New-Item -ItemType Directory -Force (Split-Path $keystore) | Out-Null
+                New-Item -ItemType Directory -Force $androidHome | Out-Null
                 & keytool -genkeypair -keystore $keystore -storepass android -alias androiddebugkey -keypass android `
                   -keyalg RSA -keysize 2048 -validity 10000 -dname 'CN=Android Debug,O=Android,C=US'
                 if ($LASTEXITCODE -ne 0) { throw 'could not make a keystore' }
@@ -372,8 +427,8 @@ jobs:
         run: |
           $apks = Get-ChildItem android/app/build/outputs/apk -Recurse -Filter '*.apk' -ErrorAction SilentlyContinue
           if (-not $apks) { throw 'no APK was produced' }
-          foreach ($apk in $apks) {
-            Write-Host "$($apk.FullName) - $([math]::Round($apk.Length / 1MB, 1)) MB"
+          foreach ($candidate in $apks) {
+            Write-Host "$($candidate.FullName) - $([math]::Round($candidate.Length / 1MB, 1)) MB"
           }
           New-Item -ItemType Directory -Force dist | Out-Null
           $apk = $apks | Where-Object { $_.Name -notmatch 'unsigned' } | Select-Object -First 1
@@ -381,7 +436,6 @@ jobs:
           $name = "shank1-${{ inputs.variant }}-${{ github.run_number }}.apk"
           Copy-Item $apk.FullName (Join-Path dist $name) -Force
           Write-Host "artifact: dist/$name"
-          Get-ChildItem dist | Format-Table Name, Length -AutoSize | Out-String | Write-Host
 
       - name: Upload the APK
         uses: actions/upload-artifact@v4
@@ -400,11 +454,15 @@ jobs:
           | | |
           | --- | --- |
           | Variant | `${{ inputs.variant }}` |
-          | Shaders | $(if ('${{ steps.shaders.outputs.mode }}' -eq 'cache') { 'your PC build''s cache (full set)' } else { 'made here from the game files (the 21 run-time shaders are missing)' }) |
+          | Shaders | $(if ('${{ steps.shaders.outputs.mode }}' -eq 'cache') { 'supplied cache (full set)' } else { 'made here from the game files' }) |
+          | Captures merged | $(if ('${{ steps.shaders.outputs.captures }}' -eq '') { 'none' } else { 'yes - the shaders a phone compiled' }) |
           | ETC2 | `$env:SHANK1_ETC2` |
           | NDK | `$env:SHANK1_NDK` |
 
-          The APK contains the program only. Install it on the phone, then **Import game data** in the launcher and
-          pick the folder with `default.xex` - the game's files never leave your device. `docs/android.md` has the
-          details (touch controls, the settings, what the shader cache is).
+          The APK contains the program only. Install it on the phone, then **Import game data** in the launcher and pick
+          the folder with `default.xex` - the game's files never leave your device.
+
+          Missing effects? The game compiles some shaders while it runs, so a build made from its files alone lacks
+          them: play once, then **Settings > Export the captures** in the app, and pass that archive as `shaders_url`
+          to a second run. `docs/android.md` has the details.
           "@ | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
