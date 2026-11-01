@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="Shank1Theme" parent="@android:style/Theme.Material.NoActionBar">
+        <item name="android:windowBackground">@color/shank_ink</item>
+        <item name="android:colorAccent">@color/shank_blood</item>
+        <item name="android:colorPrimary">@color/shank_ink</item>
+        <item name="android:colorPrimaryDark">@color/shank_ink</item>
+        <item name="android:statusBarColor">@color/shank_ink</item>
+        <item name="android:navigationBarColor">@color/shank_ink</item>
+        <item name="android:textColorPrimary">@color/shank_bone</item>
+        <item name="android:textColorSecondary">@color/shank_ash</item>
+        <item name="android:fontFamily">sans-serif-condensed</item>
+    </style>
+
+    <style name="Shank1Theme.Launcher">
+        <item name="android:windowBackground">@color/shank_ink</item>
+        <item name="android:windowFullscreen">true</item>
+        <item name="android:windowLayoutInDisplayCutoutMode">shortEdges</item>
+    </style>
+
+    <style name="Shank1Theme.Game">
+        <item name="android:windowBackground">@color/shank_ink</item>
+        <item name="android:windowFullscreen">true</item>
+        <item name="android:windowLayoutInDisplayCutoutMode">shortEdges</item>
+        <item name="android:windowContentTransitions">false</item>
+        <item name="android:windowIsTranslucent">false</item>
+        <item name="android:windowNoTitle">true</item>
+        <item name="android:windowActionBar">false</item>
+    </style>
+</resources>

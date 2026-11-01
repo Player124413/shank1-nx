@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- The game's own palette: ink, dried blood, bone. -->
+    <color name="shank_ink">#FF07080A</color>
+    <color name="shank_ink2">#FF12151A</color>
+    <color name="shank_blood">#FFB3121C</color>
+    <color name="shank_blood_dim">#FF6C0A11</color>
+    <color name="shank_bone">#FFE9E2D5</color>
+    <color name="shank_ash">#FF8C8778</color>
+</resources>

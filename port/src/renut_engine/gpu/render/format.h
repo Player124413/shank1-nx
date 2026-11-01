@@ -158,6 +158,14 @@ enum class TexelConversion : u8 {
   R10G11B11,     // Fmt10_11_11: R 10, G 11, B 11 bits, UNORM, to RGBA16 UNORM
   Depth24,       // Fmt24_8 / Fmt24_8_Float: depth in the high 24 bits, to R32_FLOAT
   CTX1,          // 4x4 blocks of two-component (normal map) data, decoded to R8G8
+  // Android (SHANK1_ANDROID_ETC2): a phone without textureCompressionBC. The guest's DXT block is transcoded to the
+  // matching ETC2/EAC block in place (src/android/etc2_encode.h): same 4x4 geometry, same 8 or 16 bytes, so nothing
+  // else in the upload path changes.
+  BC1ToETC2,     // DXT1 -> ETC2 RGB (alpha 1.0)
+  BC2ToETC2,     // DXT2/3 -> ETC2 RGBA (the guest's explicit alpha)
+  BC3ToETC2,     // DXT4/5 -> ETC2 RGBA
+  BC4ToEAC,      // DXT5A -> EAC R11
+  BC5ToEAC,      // DXN -> EAC RG11
 };
 
 struct TextureFormatInfo {

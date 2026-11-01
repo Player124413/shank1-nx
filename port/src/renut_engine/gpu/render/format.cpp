@@ -6,6 +6,11 @@
 #include "renut_engine/gpu/backend/backend.h"      // banjo-nx (2026-10-19): IsDeko3D
 #include "renut_engine/gpu/banjo_renut_tuning.h"  // banjo-nx (2026-10-19): Depth24On
 
+#if defined(SHANK1_ANDROID_ETC2)
+#include "android/android_textures.h"
+#include "android/etc2_encode.h"
+#endif
+
 #include <cstring>
 
 namespace renut::gpu {
@@ -148,6 +153,19 @@ plume::RenderStencilOp ConvertStencilOp(u32 op) {
 TextureFormatInfo GetTextureFormatInfo(GpuTextureFormat format, bool is_signed) {
   using F = plume::RenderFormat;
   using C = TexelConversion;
+#if defined(SHANK1_ANDROID_ETC2)
+  // Android: ETC2 unless the phone compresses BC itself, or the player chose RGBA8 (android/android_textures.h).
+  // The plume names below are the Vulkan ones; if the SDK's plume spells them differently this is the only place to
+  // change (docs/android.md, "Hooks into the SDK").
+  static const bool etc2 = shank1::android::textures::Etc2Enabled();
+  constexpr F kEtc2RGB = F::ETC2_R8G8B8_UNORM;
+  constexpr F kEtc2RGBA = F::ETC2_R8G8B8A8_UNORM;
+  constexpr F kEacR11 = F::EAC_R11_UNORM;
+  constexpr F kEacRG11 = F::EAC_R11G11_UNORM;
+  auto bct = [](F host, u32 bytes, C conversion) {
+    return TextureFormatInfo{host, conversion, 4, bytes, bytes, true};
+  };
+#endif
   auto plain = [](F host, u32 bytes) {
     return TextureFormatInfo{host, C::Copy, 1, bytes, bytes, false};
   };
@@ -185,16 +203,36 @@ TextureFormatInfo GetTextureFormatInfo(GpuTextureFormat format, bool is_signed) 
     return expand(F::R16G16B16A16_UNORM, C::R10G11B11, 4, 8);
   case T::FmtDXT1:
   case T::FmtDXT1_As16_16_16_16:
+#if defined(SHANK1_ANDROID_ETC2)
+    if (etc2)
+      return bct(kEtc2RGB, 8, C::BC1ToETC2);
+#endif
     return bc(F::BC1_UNORM, 8);
   case T::FmtDXT2_3:
   case T::FmtDXT2_3_As16_16_16_16:
+#if defined(SHANK1_ANDROID_ETC2)
+    if (etc2)
+      return bct(kEtc2RGBA, 16, C::BC2ToETC2);
+#endif
     return bc(F::BC2_UNORM, 16);
   case T::FmtDXT4_5:
   case T::FmtDXT4_5_As16_16_16_16:
+#if defined(SHANK1_ANDROID_ETC2)
+    if (etc2)
+      return bct(kEtc2RGBA, 16, C::BC3ToETC2);
+#endif
     return bc(F::BC3_UNORM, 16);
   case T::FmtDXT5A:
+#if defined(SHANK1_ANDROID_ETC2)
+    if (etc2)
+      return bct(kEacR11, 8, C::BC4ToEAC);
+#endif
     return bc(F::BC4_UNORM, 8);
   case T::FmtDXN:
+#if defined(SHANK1_ANDROID_ETC2)
+    if (etc2)
+      return bct(kEacRG11, 16, C::BC5ToEAC);
+#endif
     return bc(F::BC5_UNORM, 16);
   case T::FmtCTX1: {
     TextureFormatInfo info{F::R8G8_UNORM, C::CTX1, 4, 8, 4 * 4 * 2, false};
@@ -245,6 +283,40 @@ inline uint16_t Expand16(uint32_t value, uint32_t bits) {
 } // namespace
 
 void ConvertTexels(TexelConversion conversion, const uint8_t *src, uint8_t *dst, uint32_t count) {
+#if defined(SHANK1_ANDROID_ETC2)
+  // Android without textureCompressionBC: the guest's DXT blocks become ETC2/EAC blocks one for one. The effort is
+  // read once (android_etc2_effort): 1 is the fast search, 2 the thorough one, which costs load time and buys about
+  // half a decibel (tools/etc2_check.py).
+  if (conversion == TexelConversion::BC1ToETC2 || conversion == TexelConversion::BC2ToETC2 ||
+      conversion == TexelConversion::BC3ToETC2 || conversion == TexelConversion::BC4ToEAC ||
+      conversion == TexelConversion::BC5ToEAC) {
+    static const int effort = shank1::android::textures::Effort();
+    switch (conversion) {
+    case TexelConversion::BC1ToETC2:
+      for (uint32_t i = 0; i < count; ++i, src += 8, dst += 8)
+        shank1::etc2::BC1ToRGB(src, dst, effort);
+      return;
+    case TexelConversion::BC2ToETC2:
+      for (uint32_t i = 0; i < count; ++i, src += 16, dst += 16)
+        shank1::etc2::BC2ToRGBA(src, dst, effort);
+      return;
+    case TexelConversion::BC3ToETC2:
+      for (uint32_t i = 0; i < count; ++i, src += 16, dst += 16)
+        shank1::etc2::BC3ToRGBA(src, dst, effort);
+      return;
+    case TexelConversion::BC4ToEAC:
+      for (uint32_t i = 0; i < count; ++i, src += 8, dst += 8)
+        shank1::etc2::BC4ToEacR11(src, dst, effort);
+      return;
+    case TexelConversion::BC5ToEAC:
+      for (uint32_t i = 0; i < count; ++i, src += 16, dst += 16)
+        shank1::etc2::BC5ToEacRG11(src, dst, effort);
+      return;
+    default:
+      break;
+    }
+  }
+#endif
   // Xenos packs the first component in the lowest bits; the host formats put
   // it first in memory, so components are kept in XYZW order and the fetch
   // constant's swizzle is applied by the texture view.
@@ -319,6 +391,13 @@ void ConvertTexels(TexelConversion conversion, const uint8_t *src, uint8_t *dst,
     break;
   case TexelConversion::CTX1:
   case TexelConversion::Unsupported:
+    break;
+  case TexelConversion::BC1ToETC2:
+  case TexelConversion::BC2ToETC2:
+  case TexelConversion::BC3ToETC2:
+  case TexelConversion::BC4ToEAC:
+  case TexelConversion::BC5ToEAC:
+    // Android only, and handled above the switch (they write 8 or 16 bytes a block, like the DXT they replace).
     break;
   }
 }

@@ -57,6 +57,23 @@ shaders), extract it over your folder, and install the new NSP if you use it.
 The Xbox 360 layout on the Switch buttons by position. Stick clicks are L3 / R3. The port's own menus are on
 **L + R** with the D-pad (Up: performance overlay, Right: settings, Down: log console, Left: achievements).
 
+## Android
+
+The same port runs as an APK on 64-bit ARM phones and tablets: Vulkan through Renut, a launcher that imports your own
+copy of the game with the system's folder picker, and a touch pad you lay out yourself. No game data is in the APK.
+
+- **Touch controls:** a full pad, not a row of keys - left stick (with a follow centre and a response curve), D-pad,
+  two analog triggers, A/B/X/Y, bumpers, Start/Back. Drag to move, pinch to resize, hold for copy/hide/delete; saved
+  per orientation in `filesDir/touch/`. A Bluetooth controller works at the same time, and can hide the overlay.
+- **Performance:** the panel's own refresh rate (60/90/120/144 Hz) drives the frame budget, sustained-performance and
+  game mode stop the governor from dropping clocks, the thermal status steps the render scale down before the phone
+  throttles itself, and the imported game is packed into one file so a launch opens one file instead of thousands.
+- **Textures:** the console's DXT data is used as it is when the phone has `textureCompressionBC`; otherwise each block
+  is transcoded to ETC2/EAC as it is uploaded (`port/src/android/etc2_encode.h`), which keeps 4 bits a pixel and never
+  re-encodes the game's own files.
+
+Building it needs a PC for the codegen and the shader cache: see [docs/android.md](docs/android.md).
+
 ## Known issues
 <div align=center>
 <img width="273" height="211" alt="giphy" src="https://github.com/user-attachments/assets/43ef00fa-53af-4a22-8761-1eaf5f9054b8" />
@@ -67,7 +84,7 @@ The Xbox 360 layout on the Switch buttons by position. Stick clicks are L3 / R3.
 
 ## Building
 
-See [docs/building.md](docs/building.md).
+See [docs/building.md](docs/building.md) for the Switch and PC builds, [docs/android.md](docs/android.md) for Android.
 
 ## License
 

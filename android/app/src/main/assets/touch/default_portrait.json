@@ -1,0 +1,110 @@
+{
+  "version": 1,
+  "name": "Default",
+  "elements": [
+    {
+      "id": "stick_left",
+      "kind": "stick",
+      "output": "ls",
+      "x": 0.2,
+      "y": 0.81,
+      "r": 0.1,
+      "alpha": 0.5,
+      "deadzone": 0.14,
+      "curve": 1.35,
+      "follow": true
+    },
+    {
+      "id": "dpad",
+      "kind": "dpad",
+      "output": "dpad",
+      "x": 0.075,
+      "y": 0.68,
+      "r": 0.058,
+      "alpha": 0.4
+    },
+    {
+      "id": "trig_lt",
+      "kind": "trigger",
+      "output": "lt",
+      "x": 0.03,
+      "y": 0.52,
+      "r": 0.04,
+      "alpha": 0.55,
+      "h": 0.08
+    },
+    {
+      "id": "trig_rt",
+      "kind": "trigger",
+      "output": "rt",
+      "x": 0.97,
+      "y": 0.52,
+      "r": 0.04,
+      "alpha": 0.55,
+      "h": 0.08
+    },
+    {
+      "id": "btn_lb",
+      "kind": "button",
+      "output": "lb",
+      "x": 0.06,
+      "y": 0.44,
+      "r": 0.042,
+      "alpha": 0.45
+    },
+    {
+      "id": "btn_rb",
+      "kind": "button",
+      "output": "rb",
+      "x": 0.94,
+      "y": 0.44,
+      "r": 0.042,
+      "alpha": 0.45
+    },
+    {
+      "id": "btn_x",
+      "kind": "button",
+      "output": "x",
+      "x": 0.7,
+      "y": 0.76,
+      "r": 0.05,
+      "alpha": 0.55
+    },
+    {
+      "id": "btn_y",
+      "kind": "button",
+      "output": "y",
+      "x": 0.8,
+      "y": 0.68,
+      "r": 0.05,
+      "alpha": 0.55
+    },
+    {
+      "id": "btn_a",
+      "kind": "button",
+      "output": "a",
+      "x": 0.8,
+      "y": 0.84,
+      "r": 0.058,
+      "alpha": 0.55
+    },
+    {
+      "id": "btn_b",
+      "kind": "button",
+      "output": "b",
+      "x": 0.9,
+      "y": 0.76,
+      "r": 0.05,
+      "alpha": 0.55
+    },
+    {
+      "id": "btn_start",
+      "kind": "button",
+      "output": "start",
+      "x": 0.505,
+      "y": 0.94,
+      "r": 0.028,
+      "alpha": 0.4
+    }
+  ]
+}

@@ -9,6 +9,11 @@
 #include <windows.h>
 #elif defined(__SWITCH__)
 #include <switch.h>
+#elif defined(__ANDROID__)
+#include <android/native_window.h>
+
+#include <SDL3/SDL_properties.h>
+#include <SDL3/SDL_video.h>
 #else
 #include <cstdlib>
 
@@ -87,6 +92,53 @@ bool GetRenderWindowPixelSize(uint32_t &width, uint32_t &height) {
     return false;
   width = w;
   height = h;
+  return true;
+}
+
+#elif defined(__ANDROID__)
+
+// Android: the surface the Vulkan swapchain must live on is the ANativeWindow SDL's video driver created for the
+// activity (VK_KHR_android_surface). SDL hands it over as a window property; there is no display handle on Android
+// because the surface is not tied to one.
+namespace {
+
+SDL_Window *FindGameSdlWindow() {
+  int count = 0;
+  SDL_Window **windows = SDL_GetWindows(&count);
+  SDL_Window *sdl_window = (windows && count > 0) ? windows[0] : nullptr;
+  SDL_free(windows);
+  return sdl_window;
+}
+
+} // namespace
+
+bool GetNativeRenderWindow(plume::RenderWindow &out) {
+  SDL_Window *sdl_window = FindGameSdlWindow();
+  if (!sdl_window) {
+    RGPU_ERROR("No SDL window for the Vulkan surface");
+    return false;
+  }
+  auto *native_window = static_cast<ANativeWindow *>(
+      SDL_GetPointerProperty(SDL_GetWindowProperties(sdl_window), SDL_PROP_WINDOW_ANDROID_WINDOW_POINTER, nullptr));
+  if (!native_window) {
+    RGPU_ERROR("SDL window has no ANativeWindow (video driver '{}'; on Android it must be the Java surface)",
+               SDL_GetCurrentVideoDriver() ? SDL_GetCurrentVideoDriver() : "none");
+    return false;
+  }
+  // plume's RenderWindow carries the platform's surface handle: an HWND on Windows, an NWindow on the console, an
+  // ANativeWindow here (sa2-nx plume/gpu/render_window.h). If the SDK's plume defines Android differently, this one
+  // line is the only thing to change - see docs/android.md, "Hooks into the SDK".
+  out = plume::RenderWindow(native_window);
+  return true;
+}
+
+bool GetRenderWindowPixelSize(uint32_t &width, uint32_t &height) {
+  SDL_Window *sdl_window = FindGameSdlWindow();
+  int w = 0, h = 0;
+  if (!sdl_window || !SDL_GetWindowSizeInPixels(sdl_window, &w, &h))
+    return false;
+  width = uint32_t(w);
+  height = uint32_t(h);
   return true;
 }
 

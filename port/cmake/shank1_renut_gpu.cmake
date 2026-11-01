@@ -89,6 +89,18 @@ if(NOT PYTHON_EXECUTABLE)
     set(PYTHON_EXECUTABLE "${Python3_EXECUTABLE}")
 endif()
 
+# Android: Vulkan only (VK_KHR_android_surface on the activity's ANativeWindow). No deko3d back end, no host tools: the
+# build is a cross build, so Renut's translated-shader cache comes from a PC build of the same tree
+# (tools/renut_switch_shader_cache.py writes the copy without the DXIL arrays, which only Windows reads) and is compiled
+# in here - docs/android.md, "Shaders".
+if(REXGLUE_PLATFORM_ANDROID)
+    set(PLUME_PLATFORM_ANDROID ON CACHE BOOL "" FORCE)
+    set(PLUME_DEKO3D OFF CACHE BOOL "" FORCE)
+    set(BANJO_DEKO3D_HOST_SHADERS OFF CACHE BOOL "" FORCE)
+    set(SHANK1_RENUT_SHADER_CACHE_CPP "" CACHE FILEPATH
+        "Renut's shader cache for Android, generated on the PC (tools/renut_switch_shader_cache.py)")
+endif()
+
 include("${CMAKE_SOURCE_DIR}/src/renut_engine/gpu/gpu.cmake")
 
 add_library(shank1_renut_gpu OBJECT
@@ -114,6 +126,18 @@ target_include_directories(shank1_renut_gpu PRIVATE
     # banjo_renut_tuning.cpp: the Switch thread helpers (threading_switch.h, through src/me/me_platform_compat.h).
     "${SHANK1_SDK_SRC}/src/core")
 target_link_libraries(shank1_renut_gpu PRIVATE rex::runtime)
+if(REXGLUE_PLATFORM_ANDROID)
+    # The shader cache from the PC build: without it the renderer has no translated game shaders on a device that
+    # cannot run DXC (docs/android.md). The file is a .cpp, compiled into the OBJECT library like the console's GLSL
+    # package.
+    if(EXISTS "${SHANK1_RENUT_SHADER_CACHE_CPP}")
+        target_sources(shank1_renut_gpu PRIVATE "${SHANK1_RENUT_SHADER_CACHE_CPP}")
+        set_source_files_properties("${SHANK1_RENUT_SHADER_CACHE_CPP}" PROPERTIES SKIP_PRECOMPILE_HEADERS ON)
+    else()
+        message(WARNING "No SHANK1_RENUT_SHADER_CACHE_CPP: the Android build has no translated shader cache and the "
+                        "game will not draw (docs/android.md, step 3)")
+    endif()
+endif()
 if(REXGLUE_PLATFORM_SWITCH)
     # banjo-nx (2026-10-17): the deko3d back end's glue and the game shaders' GLSL package (docs/deko3d-renderer.md).
     target_sources(shank1_renut_gpu PRIVATE "${CMAKE_SOURCE_DIR}/src/renut_engine/gpu/banjo_renut_deko3d.cpp")
