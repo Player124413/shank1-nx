@@ -235,3 +235,25 @@ differently, those are the only lines to change.
   Switch build's ATL/VP9 notes in [building.md](building.md) apply unchanged.
 - A phone that reports `textureCompressionBC` will look exactly like the console build; one that does not loses a
   generation of texture quality to the transcode, by design.
+
+## Building the APK on GitHub Actions
+
+`.github/workflows/android-apk.yml` is the whole chain above on a Windows runner: you paste two links, it produces an
+APK. Run it from **Actions → Android APK → Run workflow**.
+
+| Input | What to give it |
+| --- | --- |
+| `game_data_url` | A **direct** download link to an archive (zip/7z/tar.gz) of the extracted game - `default.xex`, `data/`, `data-360/`, `ArcadeInfo.xml` - or to `default.xex` itself. A share page that shows a "download" button will not do: the workflow reads the file, and says so if it gets a web page instead. |
+| `shaders_url` | Best: an archive with `shader_cache_switch.cpp` **and** `spirv_cache.zst` from your own PC build (step 3 above) - the complete shader set, and roughly half an hour less work. Otherwise: the game's shader files (`data-360/bootstrap/shaders/*.fxc`) and the workflow makes the cache itself, which lacks the 21 shaders the game compiles at run time. |
+| `variant` | `debug` installs as is. `release` is signed with a throwaway debug key so it also installs; sign your own copy properly (Settings → Signing) for anything you keep. |
+| `etc2` | On unless you want the console's BC blocks untouched (step "ETC2" above). |
+| `sdl3_ref` | Only used when the SDK tree carries no SDL3: the tag it clones. |
+
+What it does, in order: restores the cached generated C++ (keyed by `shank1_manifest.toml` + `overrides.toml`) or runs
+`rexglue codegen`; when no shader cache was supplied, dumps and translates the shaders and builds the PC tree for it;
+finds SDL3 in the SDK (or clones it); installs NDK 26.3 and JDK 17; runs Gradle. The generated code and Gradle's caches
+are cached between runs, so a rerun that does not touch the manifest skips the expensive part.
+
+Two things it cannot do, because they need a GPU and a real play session: the 21 run-time shaders (feed it your own
+`shader_cache_switch.cpp` instead) and anything about how the game actually looks. The APK it uploads contains the
+program only - install it, then **Import game data** in the launcher and pick the folder with `default.xex`.

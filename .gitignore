@@ -12,6 +12,13 @@
 /docs/*
 !/docs/building.md
 !/docs/android.md
+
+# The CI workflow that builds the APK (docs/android.md): only this one file, nothing else under .github.
+!/.github/
+/.github/*
+!/.github/workflows/
+/.github/workflows/*
+!/.github/workflows/android-apk.yml
 !/patches/
 
 !/nsp/

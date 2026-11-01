@@ -104,6 +104,9 @@ if(REXGLUE_PLATFORM_ANDROID)
     set(SDL_TESTS OFF CACHE BOOL "" FORCE)
     add_subdirectory("${SHANK1_SDL3_DIR}" "${CMAKE_BINARY_DIR}/sdl3" EXCLUDE_FROM_ALL)
     target_link_libraries(shank1 PRIVATE SDL3::SDL3-static)
+    # SDL3 is static here: its Android glue (ANativeActivity_onCreate -> android_main) is only pulled in if the linker
+    # is told to keep it, which is what SDL's own Gradle project passes.
+    target_link_options(shank1 PRIVATE -Wl,-u,ANativeActivity_onCreate)
     # The JNI entry points and the ANativeWindow in backend/native_window.cpp.
     target_link_libraries(shank1 PRIVATE android log)
 endif()

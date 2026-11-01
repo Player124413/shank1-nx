@@ -90,7 +90,10 @@ android {
     externalNativeBuild {
         cmake {
             path = file("../../port/CMakeLists.txt")
-            version = "3.25.2+"
+            // AGP looks for a CMake in the SDK; this project needs 3.25 or newer. Pass the one you have:
+            //   -Pshank1.cmakeVersion=3.31.6   (and cmake.dir in local.properties, as .github/workflows/android-apk.yml
+            //                                   does, when it is not one the SDK ships)
+            version = project.findProperty("shank1.cmakeVersion") as String? ?: "3.22.1"
         }
     }
 
